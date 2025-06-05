@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .           # The root of your project
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"        # Map host port 8080 to container port 8080
+    container_name: go_app
