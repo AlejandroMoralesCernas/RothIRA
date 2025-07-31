@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Go Containerized Debug",
+      "type": "go",
+      "request": "attach",
+      "mode": "remote",
+      "remotePath": "/app",             // ✅ Must match container workdir
+      "port": 4000,
+      "host": "127.0.0.1",
+      "showLog": true,
+      "trace": "verbose"
+    }
+  ]
+}

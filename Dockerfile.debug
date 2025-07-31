@@ -8,7 +8,7 @@ WORKDIR /app
 
 COPY go.mod go.sum ./
 
-COPY ./cmd .
+COPY . .
 
 RUN go mod download
 
@@ -16,7 +16,7 @@ RUN go mod download
 RUN CGO_ENABLED=0 go install -ldflags "-s -w -extldflags '-static'" github.com/go-delve/delve/cmd/dlv@latest
 
 # -gcflags=all="-N -l" optimizes debugger
-RUN CGO_ENABLED=0 go build -gcflags "all=-N -l" -o go-debugger .
+RUN CGO_ENABLED=0 go build -gcflags "all=-N -l" -o go-debugger ./cmd
 
 #listens on port 4000 for debugger
 CMD [ "/go/bin/dlv", "--listen=:4000", "--headless=true", "--log=true", "--accept-multiclient", "--api-version=2", "exec", "/app/go-debugger" ]

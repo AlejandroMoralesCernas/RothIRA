@@ -7,15 +7,18 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:8080"        # Map host port 8080 to container port 8080
-    container_name: go_app
+    container_name: go_lang_app   # This line sets the container name
 
-  debbuger:
+  debugger:
     build: 
         context: .
         dockerfile: Dockerfile.debug
     ports:
         - "3000:3000"
         - "4000:4000"
+    environment:
+      - PORT=3000
+    container_name: go_lang_debugger  # This line sets the container name
 
   mongo:
     image: mongodb/mongodb-community-server:latest
