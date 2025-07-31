@@ -1,0 +1,22 @@
+FROM golang:alpine
+
+# Exposes port on 3000 and 4000
+EXPOSE 3000 4000
+
+# Sets the working directory to app
+WORKDIR /app
+
+COPY go.mod go.sum ./
+
+COPY . .
+
+RUN go mod download
+
+#CGO_Enabled=0 so that delve config is not dynamically compiled
+RUN CGO_ENABLED=0 go install -ldflags "-s -w -extldflags '-static'" github.com/go-delve/delve/cmd/dlv@latest
+
+# -gcflags=all="-N -l" optimizes debugger
+RUN CGO_ENABLED=0 go build -gcflags "all=-N -l" -o go-debugger ./cmd
+
+#listens on port 4000 for debugger
+CMD [ "/go/bin/dlv", "--listen=:4000", "--headless=true", "--log=true", "--accept-multiclient", "--api-version=2", "exec", "/app/go-debugger" ]
