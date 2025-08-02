@@ -37,8 +37,9 @@ func main() {
 
 	// write a random print here
 	e.GET("/random", func(c echo.Context) error {
-		fmt.Println("This is a random print statement!")
-		fmt.Println("Generating a random value...")
+		fmt.Println("This is a random print statement dude!")
+		fmt.Println("Generating.........")
+
 		// make a random variable and set it something
 		randomValue := 42
 		fmt.Println("Random value is:", randomValue)
