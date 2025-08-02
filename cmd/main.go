@@ -47,7 +47,6 @@ func main() {
 	// random number generator
 	e.GET("/random-number", func(c echo.Context) error {
 		randomValue := rand.Intn(100) // Generate a random number between 0 and 99
-		fmt.Println("Your random value is:", randomValue)
 		return c.String(http.StatusOK, fmt.Sprintf("Your random value is: %d", randomValue))
 	})
 
