@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"math/rand"
 )
 
 type CalculationRequest struct {
@@ -41,6 +42,12 @@ func main() {
 		randomValue := 42
 		fmt.Println("Random value is:", randomValue)
 		return c.JSON(http.StatusOK, struct{ Message string }{Message: "Random print executed!"})
+	})
+
+	// random number generator
+	e.GET("/random-number", func(c echo.Context) error {
+		randomValue := rand.Intn(100) // Generate a random number between 0 and 99
+		return c.String(http.StatusOK, fmt.Sprintf("Your random value is: %d", randomValue))
 	})
 
 	e.POST("/calculate", CalculationHandler)
