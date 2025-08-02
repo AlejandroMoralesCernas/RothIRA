@@ -50,6 +50,31 @@ func main() {
 		return c.String(http.StatusOK, fmt.Sprintf("Your random value is: %d", randomValue))
 	})
 
+	// income * interest calculator
+	e.POST("/calculate-interest", func(c echo.Context) error {
+		type InterestRequest struct {
+			Income   float64 `json:"income"`
+			Interest float64 `json:"interest"`
+		}
+
+		type InterestResponse struct {
+			Total float64 `json:"total"`
+		}
+
+		req := new(InterestRequest)
+		
+		if err := c.Bind(req); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid input"})
+		}
+
+		// interest calculation
+		total := req.Income * (1.00 + req.Interest)
+
+		return c.JSON(http.StatusOK, InterestResponse{
+			Total: total,
+		})
+	})
+
 	e.POST("/calculate", CalculationHandler)
 
 	httpPort := os.Getenv("PORT")
