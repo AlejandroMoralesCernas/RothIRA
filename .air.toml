@@ -1,0 +1,6 @@
+# air.toml
+root = "."
+
+[build]
+  cmd = "go build -o tmp/main ./cmd"
+  bin = "tmp/main"
