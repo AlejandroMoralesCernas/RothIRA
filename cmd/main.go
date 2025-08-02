@@ -20,29 +20,27 @@ type CalculationResponse struct {
 
 func main() {
 
-	fmt.Print("starting up.....")
+	fmt.Print("Starting up the Goland Roth IRA Backend...\n")
 	e := echo.New()
 
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
 	e.GET("/", func(c echo.Context) error {
-		fmt.Print("hello there!")
 		return c.HTML(http.StatusOK, "Hello, Docker! <3")
 	})
 
 	e.GET("/health", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, struct{ Status string }{Status: "OK"})
-	})
-
-	// write a random print here
-	e.GET("/random", func(c echo.Context) error {
-		fmt.Println("This is a random print statement!")
-		fmt.Println("Generating a random value...")
-		// make a random variable and set it something
-		randomValue := 42
-		fmt.Println("Random value is:", randomValue)
-		return c.JSON(http.StatusOK, struct{ Message string }{Message: "Random print executed!"})
+		health := struct {
+			Status  string `json:"status"`
+			Uptime  string `json:"uptime"`
+			Version string `json:"version"`
+		}{
+			Status:  "OK",
+			Uptime:  fmt.Sprintf("%.0fs", float64(os.Getpid())), // Placeholder for uptime
+			Version: "1.0.0",
+		}
+		return c.JSON(http.StatusOK, health)
 	})
 
 	// random number generator
@@ -76,36 +74,10 @@ func main() {
 		})
 	})
 
-	e.POST("/calculate", CalculationHandler)
-
 	httpPort := os.Getenv("PORT")
 	if httpPort == "" {
 		httpPort = "8080"
 	}
 
 	e.Logger.Fatal(e.Start(":" + httpPort))
-}
-
-// Simple implementation of an integer minimum
-// Adapted from: https://gobyexample.com/testing-and-benchmarking
-func IntMin(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func CalculationHandler(c echo.Context) error {
-	req := new(CalculationRequest)
-
-	err:= c.Bind(req)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid Input"})
-	}
-	result := req.Income
-
-	return c.JSON(http.StatusOK, CalculationResponse{
-		Outcome: result,
-		Message: "Calculation successful",
-	})
 }
