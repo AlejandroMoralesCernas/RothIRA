@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-
-	// alex osorio added this import for random number generation
 	"math/rand"
 )
 
@@ -49,7 +47,8 @@ func main() {
 	// random number generator
 	e.GET("/random-number", func(c echo.Context) error {
 		randomValue := rand.Intn(100) // Generate a random number between 0 and 99
-		return c.JSON(http.StatusOK, struct{ RandomNumber int }{RandomNumber: randomValue})
+		fmt.Println("Your random value is:", randomValue)
+		return c.String(http.StatusOK, fmt.Sprintf("Your random value is: %d", randomValue))
 	})
 
 	e.POST("/calculate", CalculationHandler)
