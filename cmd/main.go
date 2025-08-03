@@ -1,12 +1,13 @@
 package main
 
 import (
+	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
-	"fmt"
+
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"math/rand"
 )
 
 type CalculationRequest struct {
@@ -25,6 +26,7 @@ func main() {
 
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+	e.Use(middleware.CORS()) // <--- ADD THIS LINE HERE
 
 	e.GET("/", func(c echo.Context) error {
 		fmt.Print("hello there!")
@@ -63,7 +65,7 @@ func main() {
 		}
 
 		req := new(InterestRequest)
-		
+
 		if err := c.Bind(req); err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid input"})
 		}
@@ -98,7 +100,7 @@ func IntMin(a, b int) int {
 func CalculationHandler(c echo.Context) error {
 	req := new(CalculationRequest)
 
-	err:= c.Bind(req)
+	err := c.Bind(req)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid Input"})
 	}
