@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"math/rand"
+	"rothira/api/health"
 )
 
 type CalculationRequest struct {
@@ -31,16 +32,7 @@ func main() {
 	})
 
 	e.GET("/health", func(c echo.Context) error {
-		health := struct {
-			Status  string `json:"status"`
-			Uptime  string `json:"uptime"`
-			Version string `json:"version"`
-		}{
-			Status:  "OK",
-			Uptime:  fmt.Sprintf("%.0fs", float64(os.Getpid())), // Placeholder for uptime
-			Version: "1.0.0",
-		}
-		return c.JSON(http.StatusOK, health)
+		return health.HealthHandler(c)
 	})
 
 	// random number generator
