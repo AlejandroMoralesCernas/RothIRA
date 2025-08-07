@@ -8,9 +8,9 @@ WORKDIR /app
 
 COPY go.mod go.sum ./
 
-COPY . .
-
 RUN go mod download
+
+COPY . .
 
 #CGO_Enabled=0 so that delve config is not dynamically compiled
 RUN CGO_ENABLED=0 go install -ldflags "-s -w -extldflags '-static'" github.com/go-delve/delve/cmd/dlv@latest
