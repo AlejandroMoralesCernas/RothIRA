@@ -1,7 +1,15 @@
-# air.toml
+# Air config for hot-reload
 root = "."
+tmp_dir = "tmp"
 
 [build]
-  cmd = "go build -o tmp/main ./cmd"
-  bin = "tmp/main"
-  poll = true
+# Try to build ./cmd if it exists; otherwise build module root (.)
+cmd     = "sh -c 'if [ -d ./cmd ]; then echo building ./cmd && go build -o ./tmp/server ./cmd; else echo building . && go build -o ./tmp/server .; fi'"
+bin     = "tmp/server"
+full_bin = "./tmp/server"
+
+# Watch only Go/module files
+include_ext = ["go", "mod", "sum"]
+
+# Ignore heavy/irrelevant directories
+exclude_dir = ["frontend", "node_modules", "tmp", ".git", ".vscode"]
