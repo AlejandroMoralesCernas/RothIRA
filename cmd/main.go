@@ -5,12 +5,9 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"math/rand"
 	"rothira/api/health"
-
 )
 
 type CalculationRequest struct {
