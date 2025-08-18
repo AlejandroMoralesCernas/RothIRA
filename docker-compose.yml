@@ -1,15 +1,26 @@
 version: '3.8'
 
 services:
-  app:
+  prod_app:
     build:
-      context: .           # The root of your project
+      context: .
       dockerfile: Dockerfile
+      target: prod
     ports:
-      - "8080:8080"        # Map host port 8080 to container port 8080
+      - "8081:8081"
+    environment:
+      - PORT=8081
+    container_name: go_lang_prod   # This line sets the container name
+  air_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    ports:
+      - "8080:8080"
     volumes:
-      - .:/app             # Mount the current directory to /app in the container
-    container_name: go_lang_app   # This line sets the container name
+      - .:/app
+    container_name: go_lang_air
 
   debugger:
     build: 
