@@ -1,26 +1,35 @@
-version: '3.8'
-
 services:
   app:
     build:
-      context: .           # The root of your project
-      dockerfile: Dockerfile
-    ports:
-      - "8080:8080"        # Map host port 8080 to container port 8080
-    volumes:
-      - .:/app             # Mount the current directory to /app in the container
-    container_name: go_lang_app   # This line sets the container name
-
-  debugger:
-    build: 
-        context: .
-        dockerfile: Dockerfile.debug
-    ports:
-        - "3000:3000"
-        - "4000:4000"
+      context: .
+      dockerfile: Dockerfile          # Build the single image (React build + Go server)
+    container_name: go_lang_app
     environment:
-      - PORT=3000
+      - PORT=8080
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    depends_on:
+      - mongo
+
+  # Optional: keep the debugger service if you still want Delve-based debugging
+  debugger:
+    build:
+      context: .
+      dockerfile: Dockerfile.debug
     container_name: go_lang_debugger
+    working_dir: /app
+    command: ["dlv", "debug", "--headless", "--listen=:4000", "--api-version=2", "--accept-multiclient", "--continue", "--", "-port", "8081"]
+    environment:
+      - PORT=8081
+    volumes:
+      - .:/app
+    ports:
+      - "8081:8081"
+      - "4000:4000"
+    restart: unless-stopped
+    depends_on:
+      - mongo
 
   mongo:
     image: mongodb/mongodb-community-server:latest
@@ -33,6 +42,7 @@ services:
       - "27017:27017"
     volumes:
       - mongo-data:/data/db
+    restart: unless-stopped
 
 volumes:
   mongo-data:

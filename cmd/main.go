@@ -8,9 +8,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"math/rand"
 	"rothira/api/health"
-
 )
 
 type CalculationRequest struct {
@@ -23,29 +21,32 @@ type CalculationResponse struct {
 }
 
 func main() {
+	fmt.Println("Starting up the Golang Roth IRA Backend...")
 
-	fmt.Print("Starting up the Goland Roth IRA Backend...\n")
 	e := echo.New()
 
+	// Middleware
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
-	e.Use(middleware.CORS()) // <--- ADD THIS LINE HERE
+	e.Use(middleware.CORS())
 
+	// Root endpoint
 	e.GET("/", func(c echo.Context) error {
 		return c.HTML(http.StatusOK, "Hello, Docker! <3")
 	})
 
+	// Health check endpoint
 	e.GET("/health", func(c echo.Context) error {
 		return health.HealthHandler(c)
 	})
 
-	// random number generator
+	// Random number generator endpoint
 	e.GET("/random-number", func(c echo.Context) error {
-		randomValue := rand.Intn(100) // Generate a random number between 0 and 99
+		randomValue := rand.Intn(100)
 		return c.String(http.StatusOK, fmt.Sprintf("Your random value is: %d", randomValue))
 	})
 
-	// income * interest calculator
+	// Interest calculation endpoint
 	e.POST("/calculate-interest", func(c echo.Context) error {
 		type InterestRequest struct {
 			Income   float64 `json:"income"`
@@ -57,12 +58,10 @@ func main() {
 		}
 
 		req := new(InterestRequest)
-
 		if err := c.Bind(req); err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid input"})
 		}
 
-		// interest calculation
 		total := req.Income * (1.00 + req.Interest)
 
 		return c.JSON(http.StatusOK, InterestResponse{
@@ -70,10 +69,19 @@ func main() {
 		})
 	})
 
+	// Serve static frontend build and SPA fallback
+	e.Static("/", "frontend-build")
+	e.Any("/*", func(c echo.Context) error {
+		return c.File("frontend-build/index.html")
+	})
+
+	// Determine port
 	httpPort := os.Getenv("PORT")
 	if httpPort == "" {
 		httpPort = "8080"
 	}
+	fmt.Printf("Server listening on port %s\n", httpPort)
 
+	// Start server
 	e.Logger.Fatal(e.Start(":" + httpPort))
 }

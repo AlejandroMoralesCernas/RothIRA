@@ -2,8 +2,9 @@ package health
 
 import (
 	"net/http"
-	"github.com/labstack/echo/v4"
 	"time"
+
+	"github.com/labstack/echo/v4"
 )
 
 var startTime = time.Now()
