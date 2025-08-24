@@ -1,6 +1,16 @@
 version: '3.8'
 
 services:
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend
+    ports:
+      - "5000:80"
+    container_name: frontend
+
   prod_app:
     build:
       context: .
@@ -10,7 +20,7 @@ services:
       - "8081:8081"
     environment:
       - PORT=8081
-    container_name: go_lang_prod   # This line sets the container name
+    container_name: go_lang_prod
   air_app:
     build:
       context: .
