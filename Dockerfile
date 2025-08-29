@@ -12,7 +12,7 @@ WORKDIR /builder
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN go build -o /builder/app ./cmd
+RUN go build -o /builder/binaryfile ./cmd
 
 # 3) Dev stage (Air)
 FROM golang:alpine AS dev
@@ -33,6 +33,6 @@ EXPOSE 80
 # 5) backend runtime
 FROM gcr.io/distroless/base-debian12 AS backend
 WORKDIR /app
-COPY --from=backendbuilder /builder/app /app/app
+COPY --from=backendbuilder /builder/binaryfile .
 EXPOSE 8081
-CMD ["/app/app"]
+CMD ["./binaryfile"]
