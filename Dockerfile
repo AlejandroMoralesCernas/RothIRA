@@ -7,12 +7,12 @@ COPY frontend/ ./
 RUN npm run build
 
 # 2) Build backend
-FROM golang:alpine AS builder
+FROM golang:alpine AS backendbuilder
 WORKDIR /builder
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN go build -o /app/binaryfile ./cmd
+RUN go build -o /builder/app ./cmd
 
 # 3) Dev stage (Air)
 FROM golang:alpine AS dev
@@ -25,9 +25,14 @@ COPY . .
 EXPOSE 8080
 CMD ["air"]
 
-# 4) FINAL: prod last so it’s the default
-FROM gcr.io/distroless/base-debian12 AS prod
+# 4) frontend runtime
+FROM nginx:alpine AS frontend
+COPY --from=frontendbuilder /app/build /usr/share/nginx/html
+EXPOSE 80
+
+# 5) backend runtime
+FROM gcr.io/distroless/base-debian12 AS backend
 WORKDIR /app
-COPY --from=builder /app/binaryfile /app/binaryfile
-COPY --from=frontendbuilder /app/build /app/frontend-build
-CMD ["/app/binaryfile"]
+COPY --from=backendbuilder /builder/app /app/app
+EXPOSE 8081
+CMD ["/app/app"]
