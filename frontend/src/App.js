@@ -5,8 +5,8 @@ function App() {
   const [error, setError] = useState(null);
   const fetchRandomNumber = async () => {
     try {
-      // URL assumes backend runs on localhost:8080
-      const response = await fetch("http://host.docker.internal:8080/random-number");
+      // URL assumes backend runs on localhost:8081
+      const response = await fetch("http://localhost:8081/random-number");
       if (!response.ok) throw new Error("Network response was not ok");
       const number = await response.text();
       setRandomNumber(number);
@@ -15,7 +15,7 @@ function App() {
       setError("Failed to fetch random number.");
       setRandomNumber(null);
     }
-  };fff
+  };
 
   return (
     <div style={{ padding: 40, fontFamily: "sans-serif" }}>
