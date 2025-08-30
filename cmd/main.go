@@ -2,12 +2,11 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"net/http"
-	"os"
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 	"rothira/api/health"
+	"math/rand"
+	"rothira/api/interest"
+	"os"
 )
 
 type CalculationRequest struct {
@@ -21,56 +20,28 @@ type CalculationResponse struct {
 
 func main() {
 
-	fmt.Print("Starting up the Goland Roth IRA Backend...\n")
-	e := echo.New()
+	mux := http.NewServeMux()
 
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
-	e.Use(middleware.CORS()) // <--- ADD THIS LINE HERE
-
-	e.GET("/", func(c echo.Context) error {
-		return c.HTML(http.StatusOK, "Hello, Docker! <3")
+	mux.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{"message": "Hello, Docker! <3 ahhh"}`)
 	})
 
-	e.GET("/health", func(c echo.Context) error {
-		return health.HealthHandler(c)
+	mux.HandleFunc("/health", health.HealthHandler)
+
+	mux.HandleFunc("/random-number", func(w http.ResponseWriter, r *http.Request) {
+		randomValue := rand.Intn(100)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, `{"randomValue": %d}`, randomValue)
 	})
 
-	// random number generator
-	e.GET("/random-number", func(c echo.Context) error {
-		randomValue := rand.Intn(100) // Generate a random number between 0 and 99
-		return c.String(http.StatusOK, fmt.Sprintf("Your random value is: %d", randomValue))
-	})
-
-	// income * interest calculator
-	e.POST("/calculate-interest", func(c echo.Context) error {
-		type InterestRequest struct {
-			Income   float64 `json:"income"`
-			Interest float64 `json:"interest"`
-		}
-
-		type InterestResponse struct {
-			Total float64 `json:"total"`
-		}
-
-		req := new(InterestRequest)
-
-		if err := c.Bind(req); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid input"})
-		}
-
-		// interest calculation
-		total := req.Income * (1.00 + req.Interest)
-
-		return c.JSON(http.StatusOK, InterestResponse{
-			Total: total,
-		})
-	})
+	mux.HandleFunc("/calculate-interest", interest.InterestHandler)
 
 	httpPort := os.Getenv("PORT")
 	if httpPort == "" {
-		httpPort = "8080"
+		httpPort = ":8080"
 	}
-
-	e.Logger.Fatal(e.Start(":" + httpPort))
+	http.ListenAndServe(httpPort, mux)
 }
