@@ -2,21 +2,19 @@ package health
 
 import (
 	"net/http"
-	"github.com/labstack/echo/v4"
 	"time"
+	"rothira/api/health/response"
+	"encoding/json"
 )
 
-var startTime = time.Now()
-
-func HealthHandler(c echo.Context) error {
-	health := struct {
-		Status  string `json:"status"`
-		Uptime  string `json:"uptime"`
-		Version string `json:"version"`
-	}{
+func HealthHandler(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	health := response.HealthResponse{
 		Status:  "OK",
 		Uptime:  time.Since(startTime).Truncate(time.Second).String(),
 		Version: "1.0.0",
 	}
-	return c.JSON(http.StatusOK, health)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(health)
 }
