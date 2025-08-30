@@ -19,6 +19,7 @@ type CalculationResponse struct {
 }
 
 func main() {
+	fmt.Print("Starting up the Golang Roth IRA Backend...\n")
 
 	mux := http.NewServeMux()
 
