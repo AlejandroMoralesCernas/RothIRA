@@ -9,6 +9,9 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"rothira/api/health"
+
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type CalculationRequest struct {
@@ -21,6 +24,9 @@ type CalculationResponse struct {
 }
 
 func main() {
+	_ = godotenv.Load()
+	
+	fmt.Print("Starting up the Goland Roth IRA Backend...\n")
 	fmt.Print("Starting up the Golang Roth IRA Backend...\n")
 
 	e := echo.New()
