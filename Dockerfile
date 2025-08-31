@@ -33,12 +33,16 @@ EXPOSE 80
 # 5) frontend - dev 
 FROM node:18 AS dev-frontend
 WORKDIR /app
-RUN npm install -g nodemon
 COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ ./
 EXPOSE 3030
-CMD ["nodemon", "--watch", "src", "--ext", "js,css,html", "--exec", "npm", "--", "start"]
+# Set default env vars for CRA in Docker
+ENV CHOKIDAR_USEPOLLING=true
+ENV WATCHPACK_POLLING=true
+ENV PORT=3030
+# Start CRA dev server
+CMD ["npm", "start", "--", "--host", "0.0.0.0"]
 
 
 # 5) backend runtime
