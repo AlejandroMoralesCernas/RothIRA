@@ -20,8 +20,8 @@ services:
       - "3030:3030"
     volumes:
       - ./frontend:/app
-      - /app/node_modules #do not mount node_modules from host
-    container_name: react_frontend_nodemon
+      - frontend_node_modules:/app/node_modules #do not mount node_modules from host
+    container_name: react_frontend_development
 
   backend:
     build:
@@ -69,3 +69,4 @@ services:
 
 volumes:
   mongo-data:
+  frontend_node_modules:
