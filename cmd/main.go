@@ -1,32 +1,33 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"net/http"
-	"rothira/api/health"
 	"math/rand"
-	"rothira/api/interest"
+	"net/http"
 	"os"
+	"strings"
+	"time"
+
+	"rothira/api/health"
+	"rothira/api/interest"
+	"rothira/api/dbhealth"
+	"rothira/internal/database"
 )
 
-type CalculationRequest struct {
-	Income float64 `json:"income"`
-}
-
-type CalculationResponse struct {
-	Outcome float64 `json:"outcome"`
-	Message string  `json:"message"`
-}
-
 func main() {
-	fmt.Print("Starting up the Golang Roth IRA Backend...\n")
+	fmt.Println("Starting up the Golang Roth IRA Backend...")
+
+	// Connect Mongo (global database.Client / database.DB)
+	database.Init()
+	fmt.Println("Mongo connected")
 
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, `{"message": "Hello, Docker! <3 ahhh"}`)
+		fmt.Fprint(w, `{"message":"Hello, Docker! <3 ahhh"}`)
 	})
 
 	mux.HandleFunc("/health", health.HealthHandler)
@@ -35,14 +36,29 @@ func main() {
 		randomValue := rand.Intn(100)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"randomValue": %d}`, randomValue)
+		fmt.Fprintf(w, `{"randomValue":%d}`, randomValue)
 	})
 
 	mux.HandleFunc("/calculate-interest", interest.InterestHandler)
 
-	httpPort := os.Getenv("PORT")
-	if httpPort == "" {
-		httpPort = ":8080"
+	// DB health (pings Mongo)
+	mux.Handle("/db-health", dbhealth.Handler(database.Client))
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
 	}
-	http.ListenAndServe(httpPort, mux)
+	// Ensure format ":8080"
+	if !strings.HasPrefix(port, ":") {
+		port = ":" + port
+	}
+
+	srv := &http.Server{
+		Addr:              port,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		fmt.Println("server error:", err)
+	}
 }

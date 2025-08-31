@@ -4,7 +4,9 @@ WORKDIR /app
 COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ ./
+RUN npm install react-router-dom
 RUN npm run build
+ 
 
 # 2) Build backend
 FROM golang:alpine AS backendbuilder

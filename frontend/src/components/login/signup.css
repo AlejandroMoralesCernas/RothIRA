@@ -1,0 +1,136 @@
+/* Global scope for this component */
+.auth, .auth * {
+  box-sizing: border-box; /* ✅ stops inputs from sticking out */
+}
+
+/* Container */
+.auth {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f7f8fa;
+}
+
+/* Card */
+.auth__card {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border: 1px solid #e6e8eb;
+  border-radius: 16px;
+  padding: 28px 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* Title */
+.auth__title {
+  margin: 0 0 16px;
+  font-size: 24px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: #0f172a;
+  text-align: center;
+  font-weight: 700;
+}
+
+/* Error message */
+.auth__error {
+  margin: 10px 0 18px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #9f1239;
+  font-size: 14px;
+}
+
+/* Form */
+.auth__form {
+  margin-top: 8px;
+}
+
+/* Field group */
+.auth__field {
+  margin-bottom: 18px;
+}
+
+.auth__label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: #334155;
+  font-weight: 600;
+}
+
+/* Inputs */
+.auth__input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;        /* lighter border to blend */
+  border-radius: 10px;
+  background: #fff;                  /* match card background */
+  font-size: 15px;
+  color: #0f172a;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+
+.auth__input::placeholder {
+  color: #9ca3af;
+}
+
+.auth__input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+}
+
+/* Submit button */
+.auth__submit {
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #fff;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  transition: transform 80ms ease, box-shadow 180ms ease, filter 180ms ease;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+}
+
+.auth__submit:hover {
+  filter: brightness(1.05);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
+}
+
+.auth__submit:active {
+  transform: translateY(1px);
+}
+
+/* Switch mode (Sign up <-> Log in) */
+.auth__switch {
+  margin-top: 18px;
+  text-align: center;
+  color: #475569;
+  font-size: 14px;
+}
+
+/* Link-style button */
+.auth__linkbutton {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0 0 0 2px;
+  color: #0ea5e9;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.auth__linkbutton:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+  border-radius: 4px;
+}

@@ -11,25 +11,32 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-var Client *mongo.Client = dbInstance()
+var Client *mongo.Client
+var DB *mongo.Database
 
-func dbInstance() *mongo.Client {
-	err := godotenv.Load(".env")
+func Init() {
+	// Load .env (ignore error if already loaded)
+	_ = godotenv.Load(".env")
 
-	if err != nil {
-		log.Fatal("error loading the env file...")
+	uri := os.Getenv("MONGODB_URI") // matches your .env
+	dbName := os.Getenv("MONGODB_DB")
+	if uri == "" || dbName == "" {
+		log.Fatal("MONGODB_URI or MONGODB_DB not set in .env")
 	}
-
-	MongoDB := os.Getenv("MONGO_URL")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(MongoDB))
+
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
 	if err != nil {
-		log.Fatal("Mongo DB Client Error", err)
+		log.Fatal("MongoDB connection error:", err)
 	}
 
-	log.Println("Succesfully connected to MongoDB!")
+	if err := client.Ping(ctx, nil); err != nil {
+		log.Fatal("MongoDB ping error:", err)
+	}
 
-	return client
+	Client = client
+	DB = client.Database(dbName)
+	log.Println("Successfully connected to MongoDB:", dbName)
 }
