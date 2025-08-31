@@ -30,6 +30,17 @@ FROM nginx:alpine AS frontend
 COPY --from=frontendbuilder /app/build /usr/share/nginx/html
 EXPOSE 80
 
+# 5) frontend - dev 
+FROM node:18 AS dev-frontend
+WORKDIR /app
+RUN npm install -g nodemon
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ ./
+EXPOSE 3030
+CMD ["nodemon", "--watch", "src", "--ext", "js,css,html", "--exec", "npm", "--", "start"]
+
+
 # 5) backend runtime
 FROM gcr.io/distroless/base-debian12 AS backend
 WORKDIR /app
