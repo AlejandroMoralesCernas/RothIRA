@@ -30,6 +30,21 @@ FROM nginx:alpine AS frontend
 COPY --from=frontendbuilder /app/build /usr/share/nginx/html
 EXPOSE 80
 
+# 5) frontend - dev 
+FROM node:18 AS dev-frontend
+WORKDIR /app
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ ./
+EXPOSE 3030
+# Set default env vars for CRA in Docker
+ENV CHOKIDAR_USEPOLLING=true
+ENV WATCHPACK_POLLING=true
+ENV PORT=3030
+# Start CRA dev server
+CMD ["npm", "start", "--", "--host", "0.0.0.0"]
+
+
 # 5) backend runtime
 FROM gcr.io/distroless/base-debian12 AS backend
 WORKDIR /app

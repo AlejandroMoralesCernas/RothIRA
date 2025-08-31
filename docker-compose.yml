@@ -11,6 +11,18 @@ services:
       - "0:80"
     container_name: react_frontend
 
+  frontend_dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev-frontend
+    ports:
+      - "3030:3030"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules #do not mount node_modules from host
+    container_name: react_frontend_nodemon
+
   backend:
     build:
       context: .
