@@ -52,5 +52,5 @@ func main() {
 	log.Printf("Listening on %s\n", httpPort)
 	if err := http.ListenAndServe(httpPort, mux); err != nil {
 		log.Fatal(err)
-}
+	}
 }
