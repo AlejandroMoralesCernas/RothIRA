@@ -1,6 +1,8 @@
 package main
 
 import (
+	"log"
+	"strings"
 	"fmt"
 	"net/http"
 	"rothira/api/health"
@@ -43,6 +45,12 @@ func main() {
 	httpPort := os.Getenv("PORT")
 	if httpPort == "" {
 		httpPort = ":8080"
+	} else if !strings.HasPrefix(httpPort, ":") {
+		httpPort = ":" + httpPort
 	}
-	http.ListenAndServe(httpPort, mux)
+
+	log.Printf("Listening on %s\n", httpPort)
+	if err := http.ListenAndServe(httpPort, mux); err != nil {
+		log.Fatal(err)
+	}
 }
