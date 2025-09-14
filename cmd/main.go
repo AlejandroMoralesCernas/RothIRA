@@ -1,47 +1,39 @@
 package main
 
 import (
-	"log"
-	"strings"
+	"context"
 	"fmt"
+	"log"
 	"net/http"
-	"rothira/api/health"
-	"math/rand"
-	"rothira/api/interest"
 	"os"
+	"strings"
+	"time"
+
+	"rothira/internal/database"
 )
 
-type CalculationRequest struct {
-	Income float64 `json:"income"`
-}
-
-type CalculationResponse struct {
-	Outcome float64 `json:"outcome"`
-	Message string  `json:"message"`
-}
-
 func main() {
-	fmt.Print("Starting up the Golang Roth IRA Backend...\n")
+	// Explicitly initialize DB (instead of doing work at import time)
+	database.Init()
+	defer database.Close()
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
+	// Simple route to confirm DB connectivity
+	mux.HandleFunc("/db-ping", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := database.Client.Ping(ctx, nil); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			fmt.Fprint(w, `{"ok":false,"error":"db unreachable"}`)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, `{"message": "Hello, Docker! <3 ahhh"}`)
+		fmt.Fprint(w, `{"ok":true,"db":"reachable"}`)
 	})
 
-	mux.HandleFunc("/health", health.HealthHandler)
-
-	mux.HandleFunc("/random-number", func(w http.ResponseWriter, r *http.Request) {
-		randomValue := rand.Intn(100)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"randomValue": %d}`, randomValue)
-	})
-
-	mux.HandleFunc("/calculate-interest", interest.InterestHandler)
-
+	// Port config
 	httpPort := os.Getenv("PORT")
 	if httpPort == "" {
 		httpPort = ":8080"
@@ -50,7 +42,5 @@ func main() {
 	}
 
 	log.Printf("Listening on %s\n", httpPort)
-	if err := http.ListenAndServe(httpPort, mux); err != nil {
-		log.Fatal(err)
-	}
+	log.Fatal(http.ListenAndServe(httpPort, mux))
 }
