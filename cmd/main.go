@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	authapi "rothira/api/auth"
 	"rothira/internal/database"
 )
 
@@ -32,6 +33,17 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"ok":true,"db":"reachable"}`)
 	})
+
+	// --- auth wiring ---
+	// user dependency container (handler) with users collection
+	usersCol := database.DB.Collection("users")
+	authH := &authapi.Handler{Users: usersCol}
+
+	// ensure db indexes exist and hook up sign up route
+	if err := authH.Register(mux); err != nil {
+		log.Fatalf("auth register: %v", err)
+	}
+	// --- end auth wiring ---
 
 	// Port config
 	httpPort := os.Getenv("PORT")
