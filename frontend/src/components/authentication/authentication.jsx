@@ -4,8 +4,7 @@ import "./authentication.css";
 
 
 // (where we talk to our backend) read base URL from env, fallback to local backend port 8081
-const API_BASE = process.env.REACT_APP_API_BASE || "http://host.docker.internal:8081"; // process.env is used to access environment variables, otherwise fallback to localhost
-
+const API_BASE = "http://localhost:8080";
 // Creating a box (object) that holds address of API endpoints
 const API = {
   signup: `${API_BASE}/api/auth/create-user`,
@@ -16,6 +15,8 @@ const API = {
 async function postJSON(url, body, timeoutMs = 3000) { // sends data to server (url), sends data (body) in JSON format, timeout after 3 seconds (3000 ms)
   const ctrl = new AbortController(); // to abort fetch request if it takes too long
   const id = setTimeout(() => ctrl.abort(), timeoutMs); // hey javascript. here's a function. run it later, after 3 seconds
+
+  console.log("posting to " + url)
   try {
     const res = await fetch(url, { // send a network request to the url using these extra options
       method: "POST", // sending data to server
@@ -24,6 +25,8 @@ async function postJSON(url, body, timeoutMs = 3000) { // sends data to server (
       signal: ctrl.signal, // link abort controller to this fetch request
       credentials: "include", // include cookies in request
     });
+
+    console.log("response received", res)
 
     // (small robustness tweak) only try JSON if content-type says JSON; otherwise fall back to text
     const ctype = res.headers.get("content-type") || "";
