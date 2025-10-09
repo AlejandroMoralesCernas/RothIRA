@@ -1,47 +1,47 @@
+// cmd/main.go
 package main
 
 import (
+	"context"
 	"log"
-	"strings"
-	"fmt"
 	"net/http"
-	"rothira/api/health"
-	"math/rand"
-	"rothira/api/interest"
-	"os"
+	"os"	// for env vars
+	"strings"
+
+	authapi "rothira/api/auth"
+	"rothira/internal/database"
+	"rothira/internal/routes"
 )
 
-type CalculationRequest struct {
-	Income float64 `json:"income"`
-}
-
-type CalculationResponse struct {
-	Outcome float64 `json:"outcome"`
-	Message string  `json:"message"`
-}
-
 func main() {
-	fmt.Print("Starting up the Golang Roth IRA Backend...\n")
+	// 1) DB init/close
+	database.Init()
+	defer database.Close() // ensure disconnect on exit
 
-	mux := http.NewServeMux()
+	// 2) Build deps for routes
+	usersCol := database.DB.Collection("users")
+	authH := &authapi.Handler{Users: usersCol}
 
-	mux.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, `{"message": "Hello, Docker! <3 ahhh"}`)
+	// CORS allowed origin (for dev, allow localhost:3030)
+	// setting to ""
+	allowedOrigin := os.Getenv("CORS_ALLOWED_ORIGIN")
+	if allowedOrigin == "" {
+		allowedOrigin = "http://localhost:3030"
+	}
+
+	// 3) Build the router (inject a real DB ping)
+	handler, err := routes.New(routes.Deps{
+		Auth:          authH,
+		AllowedOrigin: allowedOrigin,
+		DBPing: func(ctx context.Context) error {
+			return database.Client.Ping(ctx, nil)
+		},
 	})
+	if err != nil {
+		log.Fatalf("router build: %v", err)
+	}
 
-	mux.HandleFunc("/health", health.HealthHandler)
-
-	mux.HandleFunc("/random-number", func(w http.ResponseWriter, r *http.Request) {
-		randomValue := rand.Intn(100)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"randomValue": %d}`, randomValue)
-	})
-
-	mux.HandleFunc("/calculate-interest", interest.InterestHandler)
-
+	// 4) Port
 	httpPort := os.Getenv("PORT")
 	if httpPort == "" {
 		httpPort = ":8080"
@@ -49,8 +49,6 @@ func main() {
 		httpPort = ":" + httpPort
 	}
 
-	log.Printf("Listening on %s\n", httpPort)
-	if err := http.ListenAndServe(httpPort, mux); err != nil {
-		log.Fatal(err)
-	}
+	log.Printf("Listening on %s (CORS origin: %s)\n", httpPort, allowedOrigin)
+	log.Fatal(http.ListenAndServe(httpPort, handler))
 }
