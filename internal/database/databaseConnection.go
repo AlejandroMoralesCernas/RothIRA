@@ -42,6 +42,8 @@ func Init() *mongo.Client {
 	if err != nil {
 		log.Fatal("Mongo connect error:", err)
 	}
+	
+	log.Println("Trying to connect to MongoDB at", uri)
 
 	// Verify connectivity
 	if err := client.Ping(ctx, nil); err != nil {

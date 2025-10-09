@@ -1,51 +1,47 @@
+// cmd/main.go
 package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
-	"os"
+	"os"	// for env vars
 	"strings"
-	"time"
 
 	authapi "rothira/api/auth"
 	"rothira/internal/database"
+	"rothira/internal/routes"
 )
 
 func main() {
-	// Explicitly initialize DB (instead of doing work at import time)
+	// 1) DB init/close
 	database.Init()
-	defer database.Close()
+	defer database.Close() // ensure disconnect on exit
 
-	mux := http.NewServeMux()
-
-	// Simple route to confirm DB connectivity
-	mux.HandleFunc("/db-ping", func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		if err := database.Client.Ping(ctx, nil); err != nil {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			fmt.Fprint(w, `{"ok":false,"error":"db unreachable"}`)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"ok":true,"db":"reachable"}`)
-	})
-
-	// --- auth wiring ---
-	// user dependency container (handler) with users collection
+	// 2) Build deps for routes
 	usersCol := database.DB.Collection("users")
 	authH := &authapi.Handler{Users: usersCol}
 
-	// ensure db indexes exist and hook up sign up route
-	if err := authH.Register(mux); err != nil {
-		log.Fatalf("auth register: %v", err)
+	// CORS allowed origin (for dev, allow localhost:3030)
+	// setting to ""
+	allowedOrigin := os.Getenv("CORS_ALLOWED_ORIGIN")
+	if allowedOrigin == "" {
+		allowedOrigin = "http://localhost:3030"
 	}
-	// --- end auth wiring ---
 
-	// Port config
+	// 3) Build the router (inject a real DB ping)
+	handler, err := routes.New(routes.Deps{
+		Auth:          authH,
+		AllowedOrigin: allowedOrigin,
+		DBPing: func(ctx context.Context) error {
+			return database.Client.Ping(ctx, nil)
+		},
+	})
+	if err != nil {
+		log.Fatalf("router build: %v", err)
+	}
+
+	// 4) Port
 	httpPort := os.Getenv("PORT")
 	if httpPort == "" {
 		httpPort = ":8080"
@@ -53,6 +49,6 @@ func main() {
 		httpPort = ":" + httpPort
 	}
 
-	log.Printf("Listening on %s\n", httpPort)
-	log.Fatal(http.ListenAndServe(httpPort, mux))
+	log.Printf("Listening on %s (CORS origin: %s)\n", httpPort, allowedOrigin)
+	log.Fatal(http.ListenAndServe(httpPort, handler))
 }

@@ -5,3 +5,4 @@ root = "."
   cmd = "go build -o tmp/main ./cmd"
   bin = "tmp/main"
   poll = true
+  exclude_dir = ["frontend"]
