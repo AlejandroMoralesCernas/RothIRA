@@ -11,6 +11,7 @@ import (
 	authapi "rothira/api/auth"
 	"rothira/internal/database"
 	"rothira/internal/routes"
+	"rothira/api/health"
 )
 
 func main() {
@@ -41,14 +42,19 @@ func main() {
 		log.Fatalf("router build: %v", err)
 	}
 
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", health.HealthHandler)
+	mux.Handle("/", handler)
+
 	// 4) Port
 	httpPort := os.Getenv("PORT")
-	if httpPort == "" {
+	mode := os.Getenv("APP_ENV")
+	if httpPort == "" || mode == "dev" {
 		httpPort = ":8080"
 	} else if !strings.HasPrefix(httpPort, ":") {
 		httpPort = ":" + httpPort
 	}
 
 	log.Printf("Listening on %s (CORS origin: %s)\n", httpPort, allowedOrigin)
-	log.Fatal(http.ListenAndServe(httpPort, handler))
+	log.Fatal(http.ListenAndServe(httpPort, mux))
 }

@@ -6,3 +6,6 @@ root = "."
   bin = "tmp/main"
   poll = true
   exclude_dir = ["frontend"]
+
+[serve]
+addr = "0.0.0.0:8080"
