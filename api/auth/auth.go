@@ -15,6 +15,10 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive" // mongo ObjectID type
 	"go.mongodb.org/mongo-driver/mongo"      // MongoDB driver
 	"go.mongodb.org/mongo-driver/mongo/options" // configure MongoDB queries, indexes, etc
+
+	"strconv" // string conversions for lockout countdown
+	
+
 )
 
 // remembers where the users collection is in the database, so our functions can use it
@@ -169,6 +173,8 @@ func (h *Handler) SignUp(w http.ResponseWriter, r *http.Request) { // method on 
 		"email":         in.Email,
 		"username":      in.Username,
 		"password_hash": hash,
+		"failedAttempts": 0,            // new field for tracking failed logins
+		"lockUntil":      time.Time{},  // new field for lockout expiry
 		"createdAt":     time.Now(),
 		"updatedAt":     time.Now(),
 	}
@@ -246,21 +252,66 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// fetch only the fields we need
 	var user struct {
-		ID           primitive.ObjectID `bson:"_id"`
-		Email        string             `bson:"email"`
-		Username     string             `bson:"username"`
-		PasswordHash []byte             `bson:"password_hash"` 
+		ID            primitive.ObjectID `bson:"_id"`
+		Email         string             `bson:"email"`
+		Username      string             `bson:"username"`
+		PasswordHash  []byte             `bson:"password_hash"`
+		FailedAttempts int               `bson:"failedAttempts"`
+		LockUntil      time.Time          `bson:"lockUntil"`
 	}
+
 	if err := h.Users.FindOne(ctx, filter).Decode(&user); err != nil {
 		writeJSON(w, http.StatusUnauthorized, loginOut{OK: false, Err: "invalid credentials"})
 		return
 	}
 
-	// compare bcrypt
-	if err := bcrypt.CompareHashAndPassword(user.PasswordHash, []byte(pw)); err != nil {
-		writeJSON(w, http.StatusUnauthorized, loginOut{OK: false, Err: "invalid credentials"})
+	// check if account is currently locked
+	now := time.Now()
+	if !user.LockUntil.IsZero() && user.LockUntil.After(now) {
+		remaining := int(user.LockUntil.Sub(now).Seconds())
+		writeJSON(w, http.StatusTooManyRequests, loginOut{
+			OK:  false,
+			Err: "Account locked. Try again in " + strconv.Itoa(remaining) + " seconds.",
+		})
 		return
 	}
+
+	// compare bcrypt
+	if err := bcrypt.CompareHashAndPassword(user.PasswordHash, []byte(pw)); err != nil {
+		// password incorrect then increment failedAttempts
+		user.FailedAttempts++
+		update := bson.M{"$set": bson.M{"updatedAt": now}}
+
+		if user.FailedAttempts >= 3 {
+			// lock the account for 1 minute
+			lockDuration := 1 * time.Minute
+			update["$set"].(bson.M)["failedAttempts"] = 0
+			update["$set"].(bson.M)["lockUntil"] = now.Add(lockDuration)
+			writeJSON(w, http.StatusTooManyRequests, loginOut{
+				OK:  false,
+				Err: "Too many failed attempts. Account locked for 60 seconds.",
+			})
+		} else {
+			update["$set"].(bson.M)["failedAttempts"] = user.FailedAttempts
+			writeJSON(w, http.StatusUnauthorized, loginOut{
+				OK:  false,
+				Err: "Invalid credentials (" + strconv.Itoa(user.FailedAttempts) + "/3).",
+			})
+		}
+
+		_, _ = h.Users.UpdateByID(ctx, user.ID, update)
+		return
+	}
+
+	// successful login → reset failedAttempts and clear lock
+	_, _ = h.Users.UpdateByID(ctx, user.ID, bson.M{
+		"$set": bson.M{
+			"failedAttempts": 0,
+			"lockUntil":      time.Time{},
+			"updatedAt":      now,
+		},
+	})
+
 	// success
 	writeJSON(w, http.StatusOK, loginOut{OK: true, ID: user.ID.Hex()})
 }
