@@ -10,31 +10,128 @@ import (
 	"regexp" // regular expressions
 	"strings" // string manipulation functions
 	"time" // time-related functions
+	"strconv" // string conversions for lockout countdown
+	"os" // read JWT secret from .env
 	"golang.org/x/crypto/bcrypt"             // secure password hashing
+	"github.com/golang-jwt/jwt/v5"           // JWT generation and validation
 	"go.mongodb.org/mongo-driver/bson"       // BSON encoding/decoding
 	"go.mongodb.org/mongo-driver/bson/primitive" // mongo ObjectID type
 	"go.mongodb.org/mongo-driver/mongo"      // MongoDB driver
 	"go.mongodb.org/mongo-driver/mongo/options" // configure MongoDB queries, indexes, etc
-
-	"strconv" // string conversions for lockout countdown
-	
-
 )
+
 
 // remembers where the users collection is in the database, so our functions can use it
 type Handler struct {
 	Users *mongo.Collection
 }
 
-// first calls EnsureUserIndexes to make sure the database prevents duplicates
+// jwt secret should be set in environment variable JWT_SECRET
+// calls EnsureUserIndexes to make sure the database prevents duplicates
 // then creates the routes for signing up and logging in
 func (h *Handler) Register(mux *http.ServeMux) error {
+	if os.Getenv("JWT_SECRET") == "" {
+		log.Println("Warning: JWT_SECRET not set! Tokens will fail to generate.")
+	}
+	// ensure email and username indexes are unique, return error if index creation fails
 	if err := EnsureUserIndexes(h.Users); err != nil {
 		return err
 	}
+
+	// connects frontend urls to backend go functions that handle them
 	mux.HandleFunc("/api/auth/create-user", h.SignUp)
 	mux.HandleFunc("/api/auth/login-user", h.Login)
+
+	// adds another route for verifying if a jwt token is valid
+	mux.HandleFunc("/api/auth/verify-session", func(w http.ResponseWriter, r *http.Request) {
+		// check for Authorization header
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			writeJSON(w, http.StatusUnauthorized, loginOut{OK: false, Err: "missing token"})
+			return
+		}
+		// extract token from "Bearer <token>"
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		userID, err := verifyJWT(token)
+		// return error if token invalid or expired
+		if err != nil {
+			writeJSON(w, http.StatusUnauthorized, loginOut{OK: false, Err: "invalid or expired token"})
+			return
+		}
+		writeJSON(w, http.StatusOK, bson.M{"ok": true, "user_id": userID})
+	})
+
+	// logout route (frontend just deletes its token)
+	mux.HandleFunc("/api/auth/logout", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, bson.M{
+			"ok":      true,
+			"message": "Logged out successfully",
+		})
+	})
+
 	return nil
+}
+
+// createJWT generates a signed JWT token valid for 2 minutes.
+// takes userID string input, usually mongo user's ID, returns two strings: the token and an error
+func createJWT(userID string) (string, error) {
+	// we look for the JWT_SECRET environment variable to sign the token
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		return "", errors.New("JWT_SECRET not set")
+	}
+
+	// claims store token data like user_id and expiration time using MapClaims
+	claims := jwt.MapClaims{
+		"user_id": userID,
+		"exp":     time.Now().Add(2 * time.Minute).Unix(), // expires in 2 minutes
+	}
+
+	// create a new token object specifying signing method and the claims
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	// we sign the token with our secret key, if successful we return the token string, otherwise an error
+	return token.SignedString([]byte(secret))
+}
+
+// verifyJWT validates the token signature and expiration.
+// function takes in the token string, returns userID string and error
+func verifyJWT(tokenString string) (string, error) {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		return "", errors.New("JWT_SECRET not set")
+	}
+
+	// Parse the token string to verify it's valid
+	// jwt.Parse does three main things:
+	//   1. Splits the token into its 3 parts: header, payload, and signature.
+	//   2. Checks that the token was signed using the expected algorithm (HS256).
+	//   3. Verifies the token’s signature using your secret key.
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		// Ensure the token was signed with the correct algorithm (HMAC SHA-256)
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("invalid signing method")
+		}
+		// Give the JWT library our secret key so it can verify the signature.
+		// This secret key is like the password used to prove the token was made by us.
+		return []byte(secret), nil
+	})
+
+	// checks if there was an error parsing or if the token is invalid/expired
+	if err != nil || !token.Valid {
+		return "", errors.New("invalid or expired token")
+	}
+
+	// taking the claims from the token
+	if claims, ok := token.Claims.(jwt.MapClaims); ok {
+
+		// look for the user_id field in the claims and return it
+		if userID, ok := claims["user_id"].(string); ok {
+			return userID, nil
+		}
+	}
+	// if we reach here, something was wrong with the claims, so we return an error
+	return "", errors.New("invalid claims")
 }
 
 // what the user sends us (email, username, password, first/last name)
@@ -303,7 +400,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// successful login → reset failedAttempts and clear lock
+	// successful login, reset failedAttempts and clear lock
 	_, _ = h.Users.UpdateByID(ctx, user.ID, bson.M{
 		"$set": bson.M{
 			"failedAttempts": 0,
@@ -312,6 +409,18 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 
+	// generate JWT token valid for 2 minutes
+	tokenStr, err := createJWT(user.ID.Hex())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, loginOut{OK: false, Err: "failed to generate session token"})
+		return
+	}
+
 	// success
-	writeJSON(w, http.StatusOK, loginOut{OK: true, ID: user.ID.Hex()})
+	writeJSON(w, http.StatusOK, bson.M{
+		"ok":        true,
+		"id":        user.ID.Hex(),
+		"token":     tokenStr,
+		"expiresIn": 120, // seconds
+	})
 }

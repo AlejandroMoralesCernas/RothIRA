@@ -9,6 +9,7 @@ const API_BASE = "http://localhost:8080";
 const API = {
   signup: `${API_BASE}/api/auth/create-user`,
   login:  `${API_BASE}/api/auth/login-user`,
+  verify: `${API_BASE}/api/auth/verify-session`, // ✅ new endpoint for verifying cached session
 };
 
 // helper function to make POST requests with JSON body and parse JSON response
@@ -46,6 +47,9 @@ export default function Authentication() { // declaring a React functional compo
   const navigate = useNavigate();
   const [tab, setTab] = useState("login"); // state to track which tab is active, default to "login"
 
+  const [cachedUser, setCachedUser] = useState(null); // ✅ new: store cached username if JWT still valid
+  const [checkingCache, setCheckingCache] = useState(true); // ✅ new: prevents flashing the UI before checking token
+
   // login state
   const [identifier, setIdentifier] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -72,6 +76,38 @@ export default function Authentication() { // declaring a React functional compo
     if (tab === "signup" && signupFirstFieldRef.current) signupFirstFieldRef.current.focus();
   }, [tab]);
 
+  // ✅ NEW: On component mount, check if a valid JWT exists and is still active
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const username = localStorage.getItem("username");
+
+    if (!token) {
+      setCheckingCache(false);
+      return;
+    }
+
+    // Verify token validity via backend
+    fetch(API.verify, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.ok) {
+          setCachedUser(username); // ✅ valid token: show "Welcome back" screen
+        } else {
+          // invalid or expired → clear cache
+          localStorage.removeItem("token");
+          localStorage.removeItem("username");
+        }
+      })
+      .catch(() => {
+        localStorage.removeItem("token");
+        localStorage.removeItem("username");
+      })
+      .finally(() => setCheckingCache(false));
+  }, []);
+
   // handle login form submission
   async function handleLogin(e) {  // async because we will make network request
     e.preventDefault(); // stop page from reloading on form submit
@@ -92,7 +128,7 @@ export default function Authentication() { // declaring a React functional compo
         {                           // 2nd argument:  <<< BODY STARTS here
           identifier: identifier.trim(),
           password: loginPassword,  // last property of the body
-        },                          // <<< BODY ENDS here, this comma separates 2nd arg from what's next
+        },                          // <<< BODY ENDS here
       ).catch(err => ({
         ok: false,
         status: 0,
@@ -102,10 +138,15 @@ export default function Authentication() { // declaring a React functional compo
             : "Network error" // else other network error
         }
       }));
+
       if (ok) {
         setLoginMsg({ type: "success", text: "Logged in successfully." });
-        localStorage.setItem("username", data.username);
-        navigate("/app");
+
+        // ✅ NEW: Save JWT token + username in localStorage for cache login
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("username", identifier.trim());
+
+        navigate("/app"); // redirect to app after successful login
       } else {
         // prefer server-provided message if present, else fall back to network/failed
         const serverMsg = typeof data?.error === "string" ? data.error :
@@ -162,6 +203,39 @@ export default function Authentication() { // declaring a React functional compo
     }
   }
 
+  // ✅ NEW: cached login overlay (display if valid token found)
+  if (checkingCache) return null; // wait until we check if token exists/valid
+
+  if (cachedUser) {
+    return (
+      <div className="auth-root">
+        <div className="auth-card cached-card">
+          <h2>Welcome back, {cachedUser}!</h2>
+          <p>You’re still signed in.</p>
+          <div className="cached-actions">
+            <button
+              className="auth-btn"
+              onClick={() => navigate("/app")} // go straight to app
+            >
+              Continue
+            </button>
+            <button
+              className="auth-btn logout-btn"
+              onClick={() => {
+                localStorage.removeItem("token");
+                localStorage.removeItem("username");
+                setCachedUser(null); // clear cached login
+              }}
+            >
+              Not you?
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ Default login/signup UI (unchanged below)
   return (
     // main container for authentication component
     <div className="auth-root">
@@ -181,7 +255,7 @@ export default function Authentication() { // declaring a React functional compo
             Login
           </button>
           <button
-            id="signup-tab" // link tab to its panel
+            id="signup-tab"
             className={`auth-tab ${tab === "signup" ? "active" : ""}`}
             onClick={() => setTab("signup")}
             type="button"
@@ -195,45 +269,20 @@ export default function Authentication() { // declaring a React functional compo
         </div>
 
         {tab === "login" ? (
-          <form
-            className="auth-form"
-            onSubmit={handleLogin}
-            id="login-panel"
-            role="tabpanel" // a11y: panel content
-            aria-labelledby="login-tab" // a11y: label relationship
-          >
+          // login form (same as your original)
+          <form className="auth-form" onSubmit={handleLogin} id="login-panel" role="tabpanel" aria-labelledby="login-tab">
             <label className="auth-label" htmlFor="login-identifier">Email or Username</label>
-            <input
-              id="login-identifier"
-              className="auth-input"
-              type="text"
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              placeholder="email@example.com or username"
-              autoComplete="username" // browser can auto-fill username/email
-              required // basic HTML validation
-              ref={loginFirstFieldRef} // focus first field when tab switches here
-            />
+            <input id="login-identifier" className="auth-input" type="text" value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)} placeholder="email@example.com or username"
+              autoComplete="username" required ref={loginFirstFieldRef} />
 
             <label className="auth-label" htmlFor="login-password">Password</label>
-            <input
-              id="login-password"
-              className="auth-input"
-              type="password"
-              value={loginPassword}
-              onChange={(e) => setLoginPassword(e.target.value)}
-              placeholder="••••••••"
-              autoComplete="current-password" // current password autofill
-              required // basic HTML validation
-              minLength={1} // keep relaxed here since backend enforces real rules
-            />
+            <input id="login-password" className="auth-input" type="password" value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)} placeholder="••••••••"
+              autoComplete="current-password" required minLength={1} />
 
             {loginMsg && (
-              <div
-                className={`auth-msg ${loginMsg.type}`}
-                role="alert" // announce to assistive tech
-                aria-live="polite" // politely announce updates
-              >
+              <div className={`auth-msg ${loginMsg.type}`} role="alert" aria-live="polite">
                 {loginMsg.text}
               </div>
             )}
@@ -242,89 +291,41 @@ export default function Authentication() { // declaring a React functional compo
               {loginBusy ? "Logging in..." : "Log In"}
             </button>
           </form>
-          // if tab is not "login", it must be "signup"
         ) : (
-          <form
-            className="auth-form"
-            onSubmit={handleSignup}
-            id="signup-panel"
-            role="tabpanel" // a11y: panel content
-            aria-labelledby="signup-tab" // a11y: label relationship
-          >
+          // signup form (same as your original)
+          <form className="auth-form" onSubmit={handleSignup} id="signup-panel" role="tabpanel" aria-labelledby="signup-tab">
             <label className="auth-label" htmlFor="signup-email">Email</label>
-            <input
-              id="signup-email"
-              className="auth-input"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="email@example.com"
-              autoComplete="email" // browser can auto-fill email
-              required // basic HTML validation
-            />
+            <input id="signup-email" className="auth-input" type="email" value={email}
+              onChange={(e) => setEmail(e.target.value)} placeholder="email@example.com"
+              autoComplete="email" required />
 
             <label className="auth-label" htmlFor="signup-username">Username</label>
-            <input
-              id="signup-username"
-              className="auth-input"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="your_username"
-              autoComplete="username" // browser can auto-fill username
-              required // basic HTML validation
-              minLength={3}
-              maxLength={32}
-              pattern="^[a-zA-Z0-9_]{3,32}$" // mirrors your regex
-            />
+            <input id="signup-username" className="auth-input" type="text" value={username}
+              onChange={(e) => setUsername(e.target.value)} placeholder="your_username"
+              autoComplete="username" required minLength={3} maxLength={32} pattern="^[a-zA-Z0-9_]{3,32}$" />
 
             <label className="auth-label" htmlFor="signup-password">Password</label>
-            <input
-              id="signup-password"
-              className="auth-input"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="at least 8 characters"
-              autoComplete="new-password" // new password autofill
-              required // basic HTML validation
-              minLength={8}
-            />
+            <input id="signup-password" className="auth-input" type="password" value={password}
+              onChange={(e) => setPassword(e.target.value)} placeholder="at least 8 characters"
+              autoComplete="new-password" required minLength={8} />
 
             <div className="auth-name-grid">
               <div>
                 <label className="auth-label" htmlFor="signup-first">First name</label>
-                <input
-                  id="signup-first"
-                  className="auth-input"
-                  type="text"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  placeholder="Alex"
-                  autoComplete="given-name" // browser can auto-fill first name
-                  ref={signupFirstFieldRef} // focus first field when switching to signup
-                />
+                <input id="signup-first" className="auth-input" type="text" value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)} placeholder="Alex"
+                  autoComplete="given-name" ref={signupFirstFieldRef} />
               </div>
               <div>
                 <label className="auth-label" htmlFor="signup-last">Last name</label>
-                <input
-                  id="signup-last"
-                  className="auth-input"
-                  type="text"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  placeholder="Osorio"
-                  autoComplete="family-name" // browser can auto-fill last name
-                />
+                <input id="signup-last" className="auth-input" type="text" value={lastName}
+                  onChange={(e) => setLastName(e.target.value)} placeholder="Osorio"
+                  autoComplete="family-name" />
               </div>
             </div>
 
             {signupMsg && (
-              <div
-                className={`auth-msg ${signupMsg.type}`}
-                role="alert" // announce to assistive tech
-                aria-live="polite" // politely announce updates
-              >
+              <div className={`auth-msg ${signupMsg.type}`} role="alert" aria-live="polite">
                 {signupMsg.text}
               </div>
             )}

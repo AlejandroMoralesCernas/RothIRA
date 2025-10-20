@@ -98,3 +98,31 @@
     grid-template-columns: 1fr;
   }
 }
+
+.cached-card {
+  text-align: center;
+  padding: 3rem 2rem;
+}
+
+.cached-card h2 {
+  font-size: 1.5rem;
+  color: #222;
+}
+
+.cached-card p {
+  color: #555;
+  margin-bottom: 1.5rem;
+}
+
+.cached-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.logout-btn {
+  background: #dc3545;
+}
+.logout-btn:hover {
+  background: #b02a37;
+}
