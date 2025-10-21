@@ -5,12 +5,13 @@ import (
 	"context" // manages cancelation signals
 	"encoding/json" // encoding and decoding JSON
 	"errors" // error handling
+	"fmt" // formatted I/O
 	"net/http" // HTTP client and server implementations
 	"net/mail" // email address parsing
 	"regexp" // regular expressions
 	"strings" // string manipulation functions
 	"time" // time-related functions
-	"strconv" // string conversions for lockout countdown
+	// "strconv" string conversions for lockout countdown
 	"os" // read JWT secret from .env
 	"golang.org/x/crypto/bcrypt"             // secure password hashing
 	"github.com/golang-jwt/jwt/v5"           // JWT generation and validation
@@ -33,44 +34,39 @@ func (h *Handler) Register(mux *http.ServeMux) error {
 	if os.Getenv("JWT_SECRET") == "" {
 		log.Println("Warning: JWT_SECRET not set! Tokens will fail to generate.")
 	}
+
 	// ensure email and username indexes are unique, return error if index creation fails
 	if err := EnsureUserIndexes(h.Users); err != nil {
 		return err
 	}
 
-	// connects frontend urls to backend go functions that handle them
+	// connects frontend URLs to backend Go functions that handle them
 	mux.HandleFunc("/api/auth/create-user", h.SignUp)
 	mux.HandleFunc("/api/auth/login-user", h.Login)
-
-	// adds another route for verifying if a jwt token is valid
-	mux.HandleFunc("/api/auth/verify-session", func(w http.ResponseWriter, r *http.Request) {
-		// check for Authorization header
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			writeJSON(w, http.StatusUnauthorized, loginOut{OK: false, Err: "missing token"})
-			return
-		}
-		// extract token from "Bearer <token>"
-		token := strings.TrimPrefix(authHeader, "Bearer ")
-		userID, err := verifyJWT(token)
-		// return error if token invalid or expired
-		if err != nil {
-			writeJSON(w, http.StatusUnauthorized, loginOut{OK: false, Err: "invalid or expired token"})
-			return
-		}
-		writeJSON(w, http.StatusOK, bson.M{"ok": true, "user_id": userID})
-	})
-
-	// logout route (frontend just deletes its token)
-	mux.HandleFunc("/api/auth/logout", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, bson.M{
-			"ok":      true,
-			"message": "Logged out successfully",
-		})
-	})
+	mux.HandleFunc("/api/auth/verify-session", h.VerifySession)
 
 	return nil
 }
+
+// VerifySession checks if the provided JWT token is valid and not expired.
+func (h *Handler) VerifySession(w http.ResponseWriter, r *http.Request) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		writeJSON(w, http.StatusUnauthorized, loginOut{OK: false, Err: "missing token"})
+		return
+	}
+
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	userID, err := verifyJWT(token)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, loginOut{OK: false, Err: "invalid or expired token"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, bson.M{"ok": true, "user_id": userID})
+}
+
+
 
 // createJWT generates a signed JWT token valid for 2 minutes.
 // takes userID string input, usually mongo user's ID, returns two strings: the token and an error
@@ -132,22 +128,6 @@ func verifyJWT(tokenString string) (string, error) {
 	}
 	// if we reach here, something was wrong with the claims, so we return an error
 	return "", errors.New("invalid claims")
-}
-
-// what the user sends us (email, username, password, first/last name)
-type signUpIn struct {
-	Email     string `json:"email"`
-	Username  string `json:"username"`
-	Password  string `json:"password"`
-	FirstName string `json:"firstName"`
-	LastName  string `json:"lastName"`
-}
-
-// what we send back 
-type signUpOut struct {
-	OK  bool   `json:"ok"`              // success flag
-	ID  string `json:"id,omitempty"`    // new user's ID (on success)
-	Err string `json:"error,omitempty"` // error (on failure)
 }
 
 // EnsureUserIndexes creates unique indexes for email and username.
@@ -218,209 +198,217 @@ func normalizeName(s string) string {
 	return strings.Join(parts, " ")
 }
 
-func (h *Handler) SignUp(w http.ResponseWriter, r *http.Request) { // method on handler, w is http response writer, r is incoming http request
-	// Enforce POST-only
+// signUp handler
+func (h *Handler) SignUp(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, signUpOut{OK: false, Err: "method not allowed"})
 		return
 	}
 
-	// cap request body to prevent abuse (1 MiB is generous for this payload)
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-
-	var in signUpIn // input intostruct
-	dec := json.NewDecoder(r.Body) // make a decoder that reads JSON from r.Body (the request stream)
-	dec.DisallowUnknownFields() // reject any fields in the JSON that do not map to fields in the struct
-	if err := dec.Decode(&in); err != nil {
-		writeJSON(w, http.StatusBadRequest, signUpOut{OK: false, Err: "invalid JSON"})
-		return
-	}
-
-	// lowecase inputs and remove spaces
-	in.Email = strings.ToLower(strings.TrimSpace(in.Email))     
-	in.Username = strings.TrimSpace(in.Username)
-	in.FirstName = normalizeName(in.FirstName)
-	in.LastName = normalizeName(in.LastName)
-
-	// validate required fields
-	if _, err := mail.ParseAddress(in.Email); err != nil { 
-		writeJSON(w, http.StatusBadRequest, signUpOut{OK: false, Err: "invalid email"})
-		return
-	}
-	// username policy
-	if !usernameRE.MatchString(in.Username) {
-		writeJSON(w, http.StatusBadRequest, signUpOut{OK: false, Err: "username must be 3-32 chars [a-zA-Z0-9_]"})
-		return
-	}
-	// password length
-	if len(in.Password) < 8 {
-		writeJSON(w, http.StatusBadRequest, signUpOut{OK: false, Err: "password must be at least 8 chars"})
-		return
-	}
-
-	// hash password to store securely
-	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
+	in, err := parseSignUpRequest(r)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, signUpOut{OK: false, Err: "hash error"})
+		writeJSON(w, http.StatusBadRequest, signUpOut{OK: false, Err: err.Error()})
 		return
 	}
 
-	// build the document to insert.
-	doc := bson.M{
-		"email":         in.Email,
-		"username":      in.Username,
-		"password_hash": hash,
-		"failedAttempts": 0,            // new field for tracking failed logins
-		"lockUntil":      time.Time{},  // new field for lockout expiry
-		"createdAt":     time.Now(),
-		"updatedAt":     time.Now(),
-	}
-
-	// cancellable DB context for the insert.
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-
-	// res holds the result of the insert operation
-	if _, err := h.Users.InsertOne(ctx, doc); err != nil {
-		if isDup(err) {
-			writeJSON(w, http.StatusConflict, signUpOut{OK: false, Err: "email or username already exists"})
-			log.Printf("Duplicate sign-up attempt")
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, signUpOut{OK: false, Err: "database error"})
+	if err := validateSignUpInput(in); err != nil {
+		writeJSON(w, http.StatusBadRequest, signUpOut{OK: false, Err: err.Error()})
 		return
 	}
 
-	// success
+	if err := h.insertUser(r.Context(), in); err != nil {
+		writeJSON(w, http.StatusConflict, signUpOut{OK: false, Err: err.Error()})
+		return
+	}
+
 	log.Printf("New user signed up: %s (%s)", in.Username, in.Email)
 	writeJSON(w, http.StatusOK, signUpOut{OK: true})
 }
 
+// signUp helpers
 
-// JSON request body for login.
-type loginIn struct {
-  Identifier string `json:"identifier"`
-  Password   string `json:"password"`
+// Reads and decodes the signup JSON request body.
+func parseSignUpRequest(r *http.Request) (signUpIn, error) {
+	r.Body = http.MaxBytesReader(nil, r.Body, 1<<20)
+	var in signUpIn
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&in); err != nil {
+		return signUpIn{}, errors.New("invalid JSON")
+	}
+
+	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
+	in.Username = strings.TrimSpace(in.Username)
+	in.FirstName = normalizeName(in.FirstName)
+	in.LastName = normalizeName(in.LastName)
+	return in, nil
 }
 
-// JSON response shape for success/errors.
-type loginOut struct {
-	OK  bool   `json:"ok"`              // success flag
-	ID  string `json:"id,omitempty"`    // user's ID (on success)
-	Err string `json:"error,omitempty"` // human-readable error (on failure)
+// Validates signup fields: email, username, and password.
+func validateSignUpInput(in signUpIn) error {
+	if _, err := mail.ParseAddress(in.Email); err != nil {
+		return errors.New("invalid email")
+	}
+	if !usernameRE.MatchString(in.Username) {
+		return errors.New("username must be 3-32 chars [a-zA-Z0-9_]")
+	}
+	if len(in.Password) < 8 {
+		return errors.New("password must be at least 8 characters")
+	}
+	return nil
 }
 
+// Inserts new user into MongoDB.
+func (h *Handler) insertUser(ctx context.Context, in signUpIn) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return errors.New("failed to hash password")
+	}
+
+	doc := bson.M{
+		"email":          in.Email,
+		"username":       in.Username,
+		"password_hash":  hash,
+		"failedAttempts": 0,
+		"lockUntil":      time.Time{},
+		"createdAt":      time.Now(),
+		"updatedAt":      time.Now(),
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	if _, err := h.Users.InsertOne(ctx, doc); err != nil {
+		if isDup(err) {
+			return errors.New("email or username already exists")
+		}
+		return errors.New("database error")
+	}
+	return nil
+}
+
+// login handler
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, loginOut{OK: false, Err: "method not allowed"})
 		return
 	}
 
-	// cap request body to prevent abuse (1 MiB is generous for this payload)
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-
-	// JSON decode (reject unknown fields)
-	var in loginIn
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&in); err != nil {
-		writeJSON(w, http.StatusBadRequest, loginOut{OK: false, Err: "invalid JSON"})
+	in, err := parseLoginRequest(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, loginOut{OK: false, Err: err.Error()})
 		return
 	}
 
-	in.Identifier = strings.TrimSpace(in.Identifier)
-	pw := strings.TrimSpace(in.Password)
-	if in.Identifier == "" || pw == "" {
-		writeJSON(w, http.StatusBadRequest, loginOut{OK: false, Err: "missing username or password"})
-		return
-	}
-
-	// find user by email or username (case-insensitive for email)
-	emailCandidate := strings.ToLower(in.Identifier)
-	filter := bson.D{
-		{Key: "$or", Value: bson.A{
-			bson.D{{Key: "email", Value: emailCandidate}},
-			bson.D{{Key: "username", Value: in.Identifier}},
-		}},
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-
-	// fetch only the fields we need
-	var user struct {
-		ID            primitive.ObjectID `bson:"_id"`
-		Email         string             `bson:"email"`
-		Username      string             `bson:"username"`
-		PasswordHash  []byte             `bson:"password_hash"`
-		FailedAttempts int               `bson:"failedAttempts"`
-		LockUntil      time.Time          `bson:"lockUntil"`
-	}
-
-	if err := h.Users.FindOne(ctx, filter).Decode(&user); err != nil {
+	user, err := h.findUserByIdentifier(r.Context(), in.Identifier)
+	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, loginOut{OK: false, Err: "invalid credentials"})
 		return
 	}
 
-	// check if account is currently locked
-	now := time.Now()
-	if !user.LockUntil.IsZero() && user.LockUntil.After(now) {
-		remaining := int(user.LockUntil.Sub(now).Seconds())
-		writeJSON(w, http.StatusTooManyRequests, loginOut{
-			OK:  false,
-			Err: "Account locked. Try again in " + strconv.Itoa(remaining) + " seconds.",
-		})
+	if err := h.handleLockout(user); err != nil {
+		writeJSON(w, http.StatusTooManyRequests, loginOut{OK: false, Err: err.Error()})
 		return
 	}
 
-	// compare bcrypt
-	if err := bcrypt.CompareHashAndPassword(user.PasswordHash, []byte(pw)); err != nil {
-		// password incorrect then increment failedAttempts
-		user.FailedAttempts++
-		update := bson.M{"$set": bson.M{"updatedAt": now}}
-
-		if user.FailedAttempts >= 3 {
-			// lock the account for 1 minute
-			lockDuration := 1 * time.Minute
-			update["$set"].(bson.M)["failedAttempts"] = 0
-			update["$set"].(bson.M)["lockUntil"] = now.Add(lockDuration)
-			writeJSON(w, http.StatusTooManyRequests, loginOut{
-				OK:  false,
-				Err: "Too many failed attempts. Account locked for 60 seconds.",
-			})
-		} else {
-			update["$set"].(bson.M)["failedAttempts"] = user.FailedAttempts
-			writeJSON(w, http.StatusUnauthorized, loginOut{
-				OK:  false,
-				Err: "Invalid credentials (" + strconv.Itoa(user.FailedAttempts) + "/3).",
-			})
-		}
-
-		_, _ = h.Users.UpdateByID(ctx, user.ID, update)
+	if err := h.verifyUserPassword(user, in.Password); err != nil {
+		writeJSON(w, http.StatusUnauthorized, loginOut{OK: false, Err: err.Error()})
 		return
 	}
 
-	// successful login, reset failedAttempts and clear lock
-	_, _ = h.Users.UpdateByID(ctx, user.ID, bson.M{
-		"$set": bson.M{
-			"failedAttempts": 0,
-			"lockUntil":      time.Time{},
-			"updatedAt":      now,
-		},
-	})
-
-	// generate JWT token valid for 2 minutes
 	tokenStr, err := createJWT(user.ID.Hex())
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, loginOut{OK: false, Err: "failed to generate session token"})
 		return
 	}
 
-	// success
 	writeJSON(w, http.StatusOK, bson.M{
 		"ok":        true,
 		"id":        user.ID.Hex(),
 		"token":     tokenStr,
-		"expiresIn": 120, // seconds
+		"expiresIn": 120,
 	})
+}
+
+// login helpers
+
+// Reads and decodes the login JSON request.
+func parseLoginRequest(r *http.Request) (loginIn, error) {
+	r.Body = http.MaxBytesReader(nil, r.Body, 1<<20)
+	var in loginIn
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&in); err != nil {
+		return loginIn{}, errors.New("invalid JSON")
+	}
+	in.Identifier = strings.TrimSpace(in.Identifier)
+	in.Password = strings.TrimSpace(in.Password)
+	if in.Identifier == "" || in.Password == "" {
+		return loginIn{}, errors.New("missing username or password")
+	}
+	return in, nil
+}
+
+// Finds a user by email or username.
+func (h *Handler) findUserByIdentifier(ctx context.Context, identifier string) (*UserRecord, error) {
+	emailCandidate := strings.ToLower(identifier)
+	filter := bson.D{
+		{Key: "$or", Value: bson.A{
+			bson.D{{Key: "email", Value: emailCandidate}},
+			bson.D{{Key: "username", Value: identifier}},
+		}},
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	var user UserRecord
+	if err := h.Users.FindOne(ctx, filter).Decode(&user); err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// Checks whether the account is currently locked.
+func (h *Handler) handleLockout(user *UserRecord) error {
+	now := time.Now()
+	if !user.LockUntil.IsZero() && user.LockUntil.After(now) {
+		remaining := int(user.LockUntil.Sub(now).Seconds())
+		return fmt.Errorf("account locked. Try again in %d seconds", remaining)
+	}
+	return nil
+}
+
+// Verifies password and updates lockout/attempts.
+func (h *Handler) verifyUserPassword(user *UserRecord, password string) error {
+	now := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := bcrypt.CompareHashAndPassword(user.PasswordHash, []byte(password)); err != nil {
+		user.FailedAttempts++
+		update := bson.M{"$set": bson.M{"updatedAt": now}}
+
+		if user.FailedAttempts >= 3 {
+			lockDuration := 1 * time.Minute
+			update["$set"].(bson.M)["failedAttempts"] = 0
+			update["$set"].(bson.M)["lockUntil"] = now.Add(lockDuration)
+			h.Users.UpdateByID(ctx, user.ID, update)
+			return errors.New("too many failed attempts. Account locked for 60 seconds.")
+		}
+
+		update["$set"].(bson.M)["failedAttempts"] = user.FailedAttempts
+		h.Users.UpdateByID(ctx, user.ID, update)
+		return fmt.Errorf("invalid credentials (%d/3)", user.FailedAttempts)
+	}
+
+	// successful login — reset failed attempts and lock
+	h.Users.UpdateByID(ctx, user.ID, bson.M{
+		"$set": bson.M{
+			"failedAttempts": 0,
+			"lockUntil":      time.Time{},
+			"updatedAt":      now,
+		},
+	})
+	return nil
 }
