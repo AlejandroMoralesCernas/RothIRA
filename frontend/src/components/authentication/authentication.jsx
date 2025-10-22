@@ -206,34 +206,37 @@ export default function Authentication() { // declaring a React functional compo
   // ✅ NEW: cached login overlay (display if valid token found)
   if (checkingCache) return null; // wait until we check if token exists/valid
 
-  if (cachedUser) {
-    return (
-      <div className="auth-root">
-        <div className="auth-card cached-card">
-          <h2>Welcome back, {cachedUser}!</h2>
-          <p>You’re still signed in.</p>
-          <div className="cached-actions">
-            <button
-              className="auth-btn"
-              onClick={() => navigate("/app")} // go straight to app
-            >
-              Continue
-            </button>
-            <button
-              className="auth-btn logout-btn"
-              onClick={() => {
-                localStorage.removeItem("token");
-                localStorage.removeItem("username");
-                setCachedUser(null); // clear cached login
-              }}
-            >
-              Not you?
-            </button>
-          </div>
+if (cachedUser) {
+  return (
+    <div className="auth-root">
+      <div className="auth-card cached-card">
+        <h2>Welcome back, {cachedUser}!</h2>
+        <p>You’re still signed in.</p>
+        <div className="cached-actions">
+          <button
+            className="auth-btn"
+            onClick={() => navigate("/app")}
+          >
+            Continue
+          </button>
+
+          {/* ✅ Logout button */}
+          <button
+            className="auth-btn logout-btn"
+            onClick={() => {
+              localStorage.removeItem("token");
+              localStorage.removeItem("username");
+              setCachedUser(null);
+              navigate("/"); // return to login screen
+            }}
+          >
+            Not You?
+          </button>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   // ✅ Default login/signup UI (unchanged below)
   return (

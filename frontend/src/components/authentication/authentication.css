@@ -120,9 +120,40 @@
   gap: 1rem;
 }
 
+/* logout button (also associated with 'not you? button') */
 .logout-btn {
-  background: #dc3545;
+  background: #dc3545;         /* Red base (Bootstrap danger tone) */
+  color: #fff;                 /* White text */
+  font-weight: 700;
+  border: none;
+  border-radius: 10px;
+  padding: 0.7rem 1rem;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease;
 }
-.logout-btn:hover {
-  background: #b02a37;
+
+/* Hover + focus feedback */
+.logout-btn:hover,
+.logout-btn:focus {
+  background: #b02a37;         /* Darker red when hovered */
+  transform: scale(1.03);      /* Slight pop effect */
+}
+
+/* Disabled state (in case you use it later) */
+.logout-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Positioning for cached-actions container (already present, but let’s keep it clean) */
+.cached-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1.2rem;
+}
+
+/* Optional: make both buttons visually aligned */
+.cached-actions .auth-btn {
+  min-width: 120px;
 }
