@@ -5,11 +5,11 @@
       "name": "Go Containerized Debug",
       "type": "go",
       "request": "attach",
-      "mode": "remote",
-      "remotePath": "/app",             // ✅ Must match container workdir
+      "mode": "remote", // not running on my local machine
+      "remotePath": "/app",             // Must match container workdir
       "port": 4000,
-      "host": "127.0.0.1",
-      "showLog": true,
+      "host": "127.0.0.1", // debugger reachable from my machine, docker maps this port to my computer
+      "showLog": true, // show debug logs, not required
       "trace": "verbose"
     }
   ]
